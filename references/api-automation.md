@@ -6,7 +6,7 @@ This is invoked when the user wants a runnable automation of an app flow (e.g. s
 Before writing anything, ask the user which language: **Python / Node.js / PHP / Web (HTML+vanilla JS) / other**. Don't assume. Use their app/endpoint knowledge already in `RE_FINDINGS.md`; only the language and the target flow inputs are unknown.
 
 ## Rule 1 — never ship a universal/canned script
-Generate the client **from observed behaviour**, not a template you paste blind. If a step needs a hash/sign/token, you must already know its exact recipe from RE (Phase 2–4). If you don't yet, go reverse it first — do not guess or stub it with a fake. The bundled `scripts/` are *your* references; the user gets a script tailored to *their* target's real endpoints, fields, and crypto.
+Generate the client **from observed behaviour**, not a template you paste blind. If a step needs a hash/sign/token, you must already know its exact recipe from RE (Phase 2–4). **CRITICAL: If the app uses a device identifier (e.g. `android_id`, `device_id`, UUID), you MUST analyze how it is generated and implement an equivalent `generate_device_id()` function in the script to create a fresh, valid identifier on every run.** If you don't yet know the hash/device-id algorithm, go reverse it first — do not guess or stub it with a fake. The bundled `scripts/` are *your* references; the user gets a script tailored to *their* target's real endpoints, fields, and crypto.
 
 ## The flow contract (the shape every generated client follows)
 For a typical OTP→verify→refer flow:
@@ -49,6 +49,17 @@ def make_hash(params: dict) -> str:
     # ONLY if RE shows a hash/sign is required. Implement the EXACT recipe (canonical order, secret, algo).
     raw = "&".join(f"{k}={params[k]}" for k in sorted(params)) + "&secret=SECRET_FROM_RE"
     return hashlib.md5(raw.encode()).hexdigest()      # or hmac-sha256 / sm3 — whatever RE says
+
+def generate_device_id() -> str:
+    # CRITICAL: Implement the EXACT algorithm the app uses to generate its device identifier.
+    # For example, if it hashes a random UUID, do that here. NEVER use a hardcoded value.
+    import uuid
+    # Replace this placeholder with the reversed logic from the app.
+    return str(uuid.uuid4())
+
+device_id = generate_device_id()
+S.headers.update({"X-Device-Id": device_id}) # Adjust header name based on RE
+
 
 transcript = []
 def cap(label, body): transcript.append({label: body})
@@ -97,6 +108,9 @@ const http = axios.create({ baseURL: BASE, headers: { 'User-Agent':'okhttp/4.x',
 const ask = q => new Promise(res => { const rl = readline.createInterface({input:process.stdin,output:process.stdout}); rl.question(q, a => { rl.close(); res(a.trim()); }); });
 const show = (label, r) => { console.log(`\n=== ${label} === HTTP ${r.status}`); console.log(typeof r.data==='object'?JSON.stringify(r.data,null,2):r.data); return r.data; };
 const makeHash = p => crypto.createHash('md5').update(Object.keys(p).sort().map(k=>`${k}=${p[k]}`).join('&')+'&secret=SECRET_FROM_RE').digest('hex'); // only if RE requires
+const generateDeviceId = () => { /* CRITICAL: Implement exact app logic */ return crypto.randomUUID(); }; // replace with RE logic
+const deviceId = generateDeviceId();
+http.defaults.headers['X-Device-Id'] = deviceId; // Adjust based on RE
 (async () => {
   const transcript = [];
   const account = await ask('email or phone: ');
@@ -126,6 +140,9 @@ function req($url, $payload, $headers = []) {
 }
 function show($label, $code, $res){ echo "\n=== $label === HTTP $code\n$res\n"; return json_decode($res, true); }
 function makeHash($p){ ksort($p); $raw=""; foreach($p as $k=>$v){$raw.="$k=$v&";} return md5($raw."secret=SECRET_FROM_RE"); } // only if RE requires
+function generateDeviceId(){ /* CRITICAL: Implement exact app logic */ return sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x', mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000, mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)); } // replace with RE logic
+$deviceId = generateDeviceId();
+$baseHeaders = ["X-Device-Id: $deviceId"]; // Adjust based on RE
 $t = [];
 fwrite(STDOUT,"email or phone: "); $account = trim(fgets(STDIN));
 $p = ["account"=>$account, "timestamp"=>strval(round(microtime(true)*1000))];

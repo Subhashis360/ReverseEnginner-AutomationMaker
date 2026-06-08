@@ -15,6 +15,7 @@ Output a **readable pseudocode** of the request construction with exact constant
 - Headers: exact names + order (some servers verify header order in the signed string).
 - Encoding: base64 variant (std vs urlsafe, padding), hex case, gzip-before-encrypt, etc.
 - The full **sequence** (pre-steps that mint challenge/nonce tokens).
+- **Device Identifiers**: Exact logic of how identifiers like `ANDROID_ID`, `Build.MODEL`, or UUIDs are generated, combined, or hashed. **Never hardcode device identifiers; always recreate the app's generation logic.**
 
 ## 4.2 The robust pattern: RPC the real signer instead of reimplementing
 For native/whitebox/anti-cheat tokens, **don't reimplement** — stand up the Frida-RPC signer (frida-cookbook §6) and have your host client call it. Benefits: survives obfuscation, survives app updates, always produces server-valid tokens. Reimplement only when the algorithm is plain (e.g. `HMAC-SHA256(sorted_params, static_secret)`) and you want an on-device-free client.
