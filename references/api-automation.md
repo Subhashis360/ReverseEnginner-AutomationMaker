@@ -39,9 +39,9 @@ When generating a Python automation script, STRICTLY follow this structural form
    - If the app needs a name, include a `generate_firstname()` function (specifically generating Indian names if possible) and a `last_name` generator if needed.
    - If the app needs an email but **no email verification**, use a `generate_gmail_id()` function (using Faker or similar random logic).
    - If the app **needs email verification**, take the email and OTP from the user via `input()`.
-2. **Proxies**: If the user requests proxy implementation or if request blocking occurs, include proxy variables (`proxy_host`, `proxy_port`, `proxy_username`, `proxy_password`) and pass `proxies=proxies` to requests. Do not hardcode the user's actual proxies from examples, but structure it so they can fill it in.
+2. **Proxies**: DO NOT include any proxy logic in the script UNLESS the user explicitly asks for it. If they do ask, use proxy variables (`proxy_host`, `proxy_port`, `proxy_username`, `proxy_password`) and configure the HTTP client to use them.
 3. **Request Format**: Sequence requests clearly using numbered variables (`url1`, `headers1`, `data1`, `response1`). Extract the JSON, print the response clearly after each request, and store necessary tokens for the next request (`url2`, `headers2`, etc.).
-4. **Looping**: Wrap the flow in a `while True:` loop with a `try/except` block for continuous execution, tracking success count.
+4. **Execution**: Wrap the registration logic in a function (e.g., `def run_automation():`), return success/failure status, and call it at the end of the script to print the final result.
 
 ### Template (adapt endpoints/fields/hash from RE_FINDINGS.md):
 ```python
@@ -52,8 +52,6 @@ import struct
 import time
 import requests
 from faker import Faker
-
-done = 1
 
 def generate_random_ip():
     return socket.inet_ntoa(struct.pack('>I', random.randint(1, 0xffffffff)))
@@ -75,7 +73,7 @@ def generate_firstname():
     firstname = random.choice(first_names)
     return f"{firstname}{random_number}"
 
-while True:
+def run_automation():
     try:
         # 1. Generate or Input Data
         # IF VERIFICATION REQUIRED: email_address = input("Enter email: ")
@@ -84,15 +82,6 @@ while True:
         ip_address = generate_random_ip()
         random_firstname = generate_firstname()
         
-        # 2. Proxies (Include if requested/needed)
-        proxy_host = 'YOUR_PROXY_HOST'
-        proxy_port = 'YOUR_PROXY_PORT'  # e.g., 8080
-        proxy_username = 'YOUR_PROXY_USER'
-        proxy_password = 'YOUR_PROXY_PASS'
-        
-        proxies = dict(http=f'http://{proxy_username}:{proxy_password}@{proxy_host}:{proxy_port}')
-        # proxies = None # If no proxy is required, use this instead
-
         # --- Request 1 ---
         url1 = "https://api.TARGET.com/endpoint1"
         data1 = json.dumps({"email": email_address}) # Adapt from RE
@@ -103,7 +92,7 @@ while True:
             # Add other necessary headers (e.g., Device ID) based on RE
         }
         
-        response1 = requests.post(url1, headers=headers1, data=data1, proxies=proxies)
+        response1 = requests.post(url1, headers=headers1, data=data1)
         response_content1 = response1.content
         response10 = json.loads(response_content1)
         print(response10) # Print each response
@@ -120,7 +109,7 @@ while True:
             'User-Agent': 'okhttp/4.9.2'
         }
         
-        response2 = requests.post(url2, headers=headers2, data=data2, proxies=proxies)
+        response2 = requests.post(url2, headers=headers2, data=data2)
         response_content2 = response2.content
         response20 = json.loads(response_content2)
         print(response20)
@@ -129,74 +118,164 @@ while True:
         with open('wallet_info.txt', 'a') as f:
             f.write(f'\n{email_address}||{idToken}')
             
-        print(f"[{done}] Successfully processed")
-        done += 1
-        time.sleep(1) # Adjust sleep as needed
+        return True, f"Successfully processed {email_address}"
 
     except json.decoder.JSONDecodeError as e:
-        print(f"Error decoding JSON: {e}")
+        return False, f"Error decoding JSON: {e}"
     except Exception as e:
-        print(f"An error occurred: {e}")
+        return False, f"An error occurred: {e}"
+
+if __name__ == "__main__":
+    success, message = run_automation()
+    if success:
+        print(f"SUCCESS: {message}")
+    else:
+        print(f"FAILED: {message}")
 ```
 
-## Node.js skeleton (axios) — same contract
+## Node.js skeleton (axios) — User Preferred Format
 ```js
 const axios = require('axios');
-const readline = require('readline');
 const fs = require('fs');
-const crypto = require('crypto');
-const BASE = 'https://api.TARGET.com';
-const http = axios.create({ baseURL: BASE, headers: { 'User-Agent':'okhttp/4.x', 'Content-Type':'application/json; charset=utf-8' }, validateStatus: () => true });
-const ask = q => new Promise(res => { const rl = readline.createInterface({input:process.stdin,output:process.stdout}); rl.question(q, a => { rl.close(); res(a.trim()); }); });
-const show = (label, r) => { console.log(`\n=== ${label} === HTTP ${r.status}`); console.log(typeof r.data==='object'?JSON.stringify(r.data,null,2):r.data); return r.data; };
-const makeHash = p => crypto.createHash('md5').update(Object.keys(p).sort().map(k=>`${k}=${p[k]}`).join('&')+'&secret=SECRET_FROM_RE').digest('hex'); // only if RE requires
-const generateDeviceId = () => { /* CRITICAL: Implement exact app logic */ return crypto.randomUUID(); }; // replace with RE logic
-const deviceId = generateDeviceId();
-http.defaults.headers['X-Device-Id'] = deviceId; // Adjust based on RE
+
+const generateRandomIp = () => `${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`;
+const generateGmailId = () => `user${Math.floor(Math.random() * 90000) + 10000}@gmail.com`; // Replace with faker if needed
+const generateFirstname = () => {
+    const names = ["Aarav", "Aditi", "Amit", "Aaradhya", "Arjun", "Anaya", "Ayush", "Divya"];
+    return `${names[Math.floor(Math.random() * names.length)]}${Math.floor(Math.random() * 100000)}`;
+};
+
+async function runAutomation() {
+    try {
+        const emailAddress = generateGmailId();
+        const ipAddress = generateRandomIp();
+        const randomFirstname = generateFirstname();
+
+        # --- Request 1 ---
+        const url1 = "https://api.TARGET.com/endpoint1";
+        const data1 = { email: emailAddress };
+        const headers1 = {
+            'Content-Type': 'application/json',
+            'X-Forwarded-For': ipAddress,
+            'User-Agent': 'okhttp/4.9.2'
+        };
+
+        const response1 = await axios.post(url1, data1, { headers: headers1 });
+        const response10 = response1.data;
+        console.log(response10);
+
+        const idToken = response10.idToken || '';
+
+        // --- Request 2 ---
+        const url2 = "http://api.TARGET.com/endpoint2";
+        const data2 = { name: randomFirstname };
+        const headers2 = {
+            'Content-Type': 'application/json',
+            'X-Forwarded-For': ipAddress,
+            'authorization': `Bearer ${idToken}`,
+            'User-Agent': 'okhttp/4.9.2'
+        };
+
+        const response2 = await axios.post(url2, data2, { headers: headers2 });
+        const response20 = response2.data;
+        console.log(response20);
+
+        fs.appendFileSync('wallet_info.txt', `\n${emailAddress}||${idToken}`);
+
+        return { success: true, message: `Successfully processed ${emailAddress}` };
+    } catch (error) {
+        return { success: false, message: `An error occurred: ${error.message}` };
+    }
+}
+
 (async () => {
-  const transcript = [];
-  const account = await ask('email or phone: ');
-  let p = { account, timestamp: Date.now().toString() };
-  // p.sign = makeHash(p);
-  let r = await http.post('/pub/user/sendCode', p); let b = show('send-otp', r); transcript.push({send_otp:b});
-  const token = b?.data?.token || '';
-  const otp = await ask('OTP code: ');
-  r = await http.post('/pub/user/checkCode', { account, code: otp, token }); b = show('verify-otp', r); transcript.push({verify_otp:b});
-  const jwt = b?.data?.loginToken || '';
-  const refer = await ask('refer code (blank to skip): ');
-  if (refer) { r = await http.post('/user/applyRefer', { code: refer }, { headers: { Authorization: jwt } }); b = show('apply-refer', r); transcript.push({apply_refer:b}); }
-  const out = `flow_${Date.now()}.txt`; fs.writeFileSync(out, JSON.stringify(transcript, null, 2)); console.log(`\nsaved -> ${out}`);
+    const result = await runAutomation();
+    if (result.success) {
+        console.log(`SUCCESS: ${result.message}`);
+    } else {
+        console.log(`FAILED: ${result.message}`);
+    }
 })();
 ```
 
-## PHP CLI skeleton (curl) — same contract
+## PHP CLI skeleton (curl) — User Preferred Format
 ```php
 <?php
-$BASE = "https://api.TARGET.com";
-function req($url, $payload, $headers = []) {
-  $ch = curl_init($url);
-  curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>json_encode($payload),
-    CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>array_merge(["Content-Type: application/json"], $headers)]);
-  $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-  return [$code, $res];
+// Generators
+function generateRandomIp() { return mt_rand(0,255).".".mt_rand(0,255).".".mt_rand(0,255).".".mt_rand(0,255); }
+function generateGmailId() { return "user".mt_rand(10000,99999)."@gmail.com"; }
+function generateFirstname() {
+    $names = ["Aarav", "Aditi", "Amit", "Aaradhya", "Arjun", "Anaya"];
+    return $names[array_rand($names)].mt_rand(1, 100000);
 }
-function show($label, $code, $res){ echo "\n=== $label === HTTP $code\n$res\n"; return json_decode($res, true); }
-function makeHash($p){ ksort($p); $raw=""; foreach($p as $k=>$v){$raw.="$k=$v&";} return md5($raw."secret=SECRET_FROM_RE"); } // only if RE requires
-function generateDeviceId(){ /* CRITICAL: Implement exact app logic */ return sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x', mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000, mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)); } // replace with RE logic
-$deviceId = generateDeviceId();
-$baseHeaders = ["X-Device-Id: $deviceId"]; // Adjust based on RE
-$t = [];
-fwrite(STDOUT,"email or phone: "); $account = trim(fgets(STDIN));
-$p = ["account"=>$account, "timestamp"=>strval(round(microtime(true)*1000))];
-// $p["sign"] = makeHash($p);
-[$c,$r] = req("$BASE/pub/user/sendCode", $p); $b = show("send-otp",$c,$r); $t["send_otp"]=$b;
-$token = $b["data"]["token"] ?? "";
-fwrite(STDOUT,"OTP code: "); $otp = trim(fgets(STDIN));
-[$c,$r] = req("$BASE/pub/user/checkCode", ["account"=>$account,"code"=>$otp,"token"=>$token]); $b = show("verify-otp",$c,$r); $t["verify_otp"]=$b;
-$jwt = $b["data"]["loginToken"] ?? "";
-fwrite(STDOUT,"refer code (blank to skip): "); $refer = trim(fgets(STDIN));
-if ($refer !== "") { [$c,$r] = req("$BASE/user/applyRefer", ["code"=>$refer], ["Authorization: $jwt"]); $b = show("apply-refer",$c,$r); $t["apply_refer"]=$b; }
-$out = "flow_".time().".txt"; file_put_contents($out, json_encode($t, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE)); echo "\nsaved -> $out\n";
+
+function runAutomation() {
+    try {
+        $emailAddress = generateGmailId();
+        $ipAddress = generateRandomIp();
+        $randomFirstname = generateFirstname();
+
+        # --- Request 1 ---
+        $url1 = "https://api.TARGET.com/endpoint1";
+        $data1 = json_encode(["email" => $emailAddress]);
+        $headers1 = [
+            'Content-Type: application/json',
+            'X-Forwarded-For: ' . $ipAddress,
+            'User-Agent: okhttp/4.9.2'
+        ];
+
+        $ch1 = curl_init($url1);
+        curl_setopt_array($ch1, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $data1,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => $headers1
+        ]);
+
+        $response_content1 = curl_exec($ch1);
+        curl_close($ch1);
+        $response10 = json_decode($response_content1, true);
+        echo json_encode($response10) . "\n";
+
+        $idToken = $response10['idToken'] ?? '';
+
+        // --- Request 2 ---
+        $url2 = "http://api.TARGET.com/endpoint2";
+        $data2 = json_encode(["name" => $randomFirstname]);
+        $headers2 = [
+            'Content-Type: application/json',
+            'X-Forwarded-For: ' . $ipAddress,
+            'authorization: Bearer ' . $idToken,
+            'User-Agent: okhttp/4.9.2'
+        ];
+
+        $ch2 = curl_init($url2);
+        curl_setopt_array($ch2, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $data2,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => $headers2
+        ]);
+
+        $response_content2 = curl_exec($ch2);
+        curl_close($ch2);
+        $response20 = json_decode($response_content2, true);
+        echo json_encode($response20) . "\n";
+
+        file_put_contents('wallet_info.txt', "\n" . $emailAddress . "||" . $idToken, FILE_APPEND);
+
+        return ["success" => true, "message" => "Successfully processed $emailAddress"];
+    } catch (Exception $e) {
+        return ["success" => false, "message" => "An error occurred: " . $e->getMessage()];
+    }
+}
+
+$result = runAutomation();
+if ($result["success"]) {
+    echo "SUCCESS: " . $result["message"] . "\n";
+} else {
+    echo "FAILED: " . $result["message"] . "\n";
+}
 ```
 
 ## Web GUI variants
