@@ -30,71 +30,113 @@ For a typical OTP→verify→refer flow:
 ```
 Every step prints its response in the terminal. Tokens always flow from the previous response into the next request exactly where the app puts them (match header name / body key from RE).
 
-## Python skeleton (requests) — adapt endpoints/fields/hash from RE_FINDINGS.md
+## Python skeleton (User Preferred Standalone Format)
+When generating a Python automation script, STRICTLY follow this structural format and set of rules:
+
+### Rules:
+1. **Generators**: 
+   - If the app needs an IP, include a `generate_random_ip()` function.
+   - If the app needs a name, include a `generate_firstname()` function (specifically generating Indian names if possible) and a `last_name` generator if needed.
+   - If the app needs an email but **no email verification**, use a `generate_gmail_id()` function (using Faker or similar random logic).
+   - If the app **needs email verification**, take the email and OTP from the user via `input()`.
+2. **Proxies**: If the user requests proxy implementation or if request blocking occurs, include proxy variables (`proxy_host`, `proxy_port`, `proxy_username`, `proxy_password`) and pass `proxies=proxies` to requests. Do not hardcode the user's actual proxies from examples, but structure it so they can fill it in.
+3. **Request Format**: Sequence requests clearly using numbered variables (`url1`, `headers1`, `data1`, `response1`). Extract the JSON, print the response clearly after each request, and store necessary tokens for the next request (`url2`, `headers2`, etc.).
+4. **Looping**: Wrap the flow in a `while True:` loop with a `try/except` block for continuous execution, tracking success count.
+
+### Template (adapt endpoints/fields/hash from RE_FINDINGS.md):
 ```python
-#!/usr/bin/env python3
-import requests, json, sys, time, hashlib
+import json
+import random
+import socket
+import struct
+import time
+import requests
+from faker import Faker
 
-BASE = "https://api.TARGET.com"          # from RE
-S = requests.Session()
-S.headers.update({"User-Agent": "okhttp/4.x", "Content-Type": "application/json; charset=utf-8"})  # match app
+done = 1
 
-def show(label, r):
-    print(f"\n=== {label} === HTTP {r.status_code}")
-    try: body = r.json(); print(json.dumps(body, indent=2, ensure_ascii=False))
-    except Exception: body = r.text; print(body)
-    return body
+def generate_random_ip():
+    return socket.inet_ntoa(struct.pack('>I', random.randint(1, 0xffffffff)))
 
-def make_hash(params: dict) -> str:
-    # ONLY if RE shows a hash/sign is required. Implement the EXACT recipe (canonical order, secret, algo).
-    raw = "&".join(f"{k}={params[k]}" for k in sorted(params)) + "&secret=SECRET_FROM_RE"
-    return hashlib.md5(raw.encode()).hexdigest()      # or hmac-sha256 / sm3 — whatever RE says
+def generate_gmail_id():
+    fake = Faker()
+    first_name = fake.first_name().lower()
+    last_name = fake.last_name().lower()
+    rand_int = random.randint(11, 99999)
+    email_provider = 'gmail.com'
+    return f"{first_name}{last_name}{rand_int}@{email_provider}"
 
-def generate_device_id() -> str:
-    # CRITICAL: Implement the EXACT algorithm the app uses to generate its device identifier.
-    # For example, if it hashes a random UUID, do that here. NEVER use a hardcoded value.
-    import uuid
-    # Replace this placeholder with the reversed logic from the app.
-    return str(uuid.uuid4())
+def generate_firstname():
+    first_names = [
+        "Aarav", "Aditi", "Amit", "Aaradhya", "Arjun", "Anaya", "Ayush", "Divya", "Gaurav",
+        "Isha", "Kunal", "Mira", "Neha", "Rahul", "Riya", "Ved", "Zara", "Varun", "Shreya"
+    ]
+    random_number = random.randint(1, 100000)
+    firstname = random.choice(first_names)
+    return f"{firstname}{random_number}"
 
-device_id = generate_device_id()
-S.headers.update({"X-Device-Id": device_id}) # Adjust header name based on RE
+while True:
+    try:
+        # 1. Generate or Input Data
+        # IF VERIFICATION REQUIRED: email_address = input("Enter email: ")
+        # IF NO VERIFICATION:
+        email_address = generate_gmail_id()
+        ip_address = generate_random_ip()
+        random_firstname = generate_firstname()
+        
+        # 2. Proxies (Include if requested/needed)
+        proxy_host = 'YOUR_PROXY_HOST'
+        proxy_port = 'YOUR_PROXY_PORT'  # e.g., 8080
+        proxy_username = 'YOUR_PROXY_USER'
+        proxy_password = 'YOUR_PROXY_PASS'
+        
+        proxies = dict(http=f'http://{proxy_username}:{proxy_password}@{proxy_host}:{proxy_port}')
+        # proxies = None # If no proxy is required, use this instead
 
+        # --- Request 1 ---
+        url1 = "https://api.TARGET.com/endpoint1"
+        data1 = json.dumps({"email": email_address}) # Adapt from RE
+        headers1 = {
+            'Content-Type': 'application/json',
+            'X-Forwarded-For': ip_address,
+            'User-Agent': 'okhttp/4.9.2'
+            # Add other necessary headers (e.g., Device ID) based on RE
+        }
+        
+        response1 = requests.post(url1, headers=headers1, data=data1, proxies=proxies)
+        response_content1 = response1.content
+        response10 = json.loads(response_content1)
+        print(response10) # Print each response
+        
+        idToken = response10.get('idToken', '')
 
-transcript = []
-def cap(label, body): transcript.append({label: body})
+        # --- Request 2 ---
+        url2 = "http://api.TARGET.com/endpoint2"
+        data2 = json.dumps({"name": random_firstname})
+        headers2 = {
+            'Content-Type': 'application/json',
+            'X-Forwarded-For': ip_address,
+            'authorization': f'Bearer {idToken}',
+            'User-Agent': 'okhttp/4.9.2'
+        }
+        
+        response2 = requests.post(url2, headers=headers2, data=data2, proxies=proxies)
+        response_content2 = response2.content
+        response20 = json.loads(response_content2)
+        print(response20)
+        
+        # Save output
+        with open('wallet_info.txt', 'a') as f:
+            f.write(f'\n{email_address}||{idToken}')
+            
+        print(f"[{done}] Successfully processed")
+        done += 1
+        time.sleep(1) # Adjust sleep as needed
 
-# --- 1. inputs ---
-account = input("email or phone: ").strip()
-
-# --- 2. send OTP ---
-ts = str(int(time.time()*1000))
-payload = {"account": account, "timestamp": ts}          # field names from RE
-# payload["sign"] = make_hash(payload)                   # uncomment if RE requires
-r = S.post(f"{BASE}/pub/user/sendCode", json=payload)
-body = show("send-otp", r); cap("send_otp", body)
-session_token = (body or {}).get("data", {}).get("token", "")   # path from RE
-
-# --- 3. input OTP ---
-otp = input("OTP code: ").strip()
-
-# --- 4. verify OTP ---
-vp = {"account": account, "code": otp, "token": session_token}   # carry token exactly as app does
-r = S.post(f"{BASE}/pub/user/checkCode", json=vp)
-body = show("verify-otp", r); cap("verify_otp", body)
-jwt = (body or {}).get("data", {}).get("loginToken", "")         # next token
-
-# --- 5. apply refer (optional) ---
-refer = input("refer code (blank to skip): ").strip()
-if refer:
-    S.headers["Authorization"] = jwt                              # header name from RE
-    r = S.post(f"{BASE}/user/applyRefer", json={"code": refer})
-    body = show("apply-refer", r); cap("apply_refer", body)
-
-# --- 6. persist ---
-out = f"flow_{int(time.time())}.txt"
-open(out, "w", encoding="utf-8").write(json.dumps(transcript, indent=2, ensure_ascii=False))
-print(f"\nsaved -> {out}")
+    except json.decoder.JSONDecodeError as e:
+        print(f"Error decoding JSON: {e}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 ```
 
 ## Node.js skeleton (axios) — same contract
